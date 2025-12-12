@@ -1,0 +1,3 @@
+rows: 45728
+timestamp_parse_errors: 0
+non_numeric_values: 0

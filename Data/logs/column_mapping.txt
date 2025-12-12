@@ -1,0 +1,5 @@
+timestamp  -> timestamp
+aqi_raw    -> aqi_raw
+temperature_c -> temperature_c
+humidity   -> humidity
+presence   -> presence
