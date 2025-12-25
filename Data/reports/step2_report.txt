@@ -1,3 +1,0 @@
-features_added: sin_minute_day, cos_minute_day, sin_day_week, cos_day_week, aqi_smoothed
-rows: 45728
-smoothing_window: 12 samples (60 seconds)

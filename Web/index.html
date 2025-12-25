@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>IoT Dashboard</title>
+</head>
+
+<body style="background-color:#555; color:white; font-family: monospace;">
+<h2>Live Sensor & Prediction Data</h2>
+
+<div id="status">🔴 Disconnected</div>
+<hr>
+
+<pre id="output"></pre>
+
+<script>
+    const output = document.getElementById("output");
+    const status = document.getElementById("status");
+
+    const ws = new WebSocket("ws://192.168.1.111:8765");
+
+    ws.onopen = () => {
+        status.textContent = "🟢 Connected";
+        console.log("Connected to WS server");
+    };
+
+    ws.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        console.log("Received:", msg);
+
+        if (msg.type === "live") {
+            output.textContent =
+                "RAW DATA\n" +
+                JSON.stringify(msg.raw, null, 2) +
+                "\n\nPREDICTION\n" +
+                JSON.stringify(msg.prediction, null, 2) +
+                "\n\n-------------------------\n" +
+                output.textContent;
+        }
+
+        if (msg.type === "historical") {
+            output.textContent =
+                "HISTORICAL DATA\n" +
+                JSON.stringify(msg.raw, null, 2) +
+                "\n\nPREDICTION\n" +
+                JSON.stringify(msg.prediction, null, 2);
+        }
+    };
+
+    ws.onerror = (err) => {
+        console.error("WS error", err);
+        status.textContent = "🔴 Error";
+    };
+
+    ws.onclose = () => {
+        status.textContent = "🔴 Disconnected";
+    };
+</script>
+
+</body>
+</html>

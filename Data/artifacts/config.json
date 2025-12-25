@@ -1,9 +1,0 @@
-{
-  "sampling_seconds": 5,
-  "history_steps": 180,
-  "horizons_steps": [12, 60, 180],
-  "aqi_smoothing_window_steps": 12,
-  "features_order": ["aqi_smoothed","temperature_c","humidity","presence","sin_minute_day","cos_minute_day","sin_day_week","cos_day_week"],
-  "target_variables": ["AQI","Temperature","Humidity"],
-  "quantiles": [0.05, 0.5, 0.95]
-}
