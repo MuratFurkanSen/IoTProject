@@ -1,96 +1,6 @@
 /**
  * IoT Dashboard Controller
- * Handles Mock Data, Charts, and UI Updates
  */
-
-class MockWebSocket {
-    constructor(onMessage, onStatusChange) {
-        this.onMessage = onMessage;
-        this.onStatusChange = onStatusChange;
-        this.isConnected = false;
-        this.intervalId = null;
-
-        // Base state for random walk
-        this.state = {
-            aqi: 80,
-            temp: 24,
-            hum: 45,
-            prs: 0
-        };
-    }
-
-    connect() {
-        console.log("WebSocket: Connecting...");
-        setTimeout(() => {
-            this.isConnected = true;
-            this.onStatusChange(true);
-            this._startEmitting();
-        }, 1000);
-    }
-
-    _startEmitting() {
-        // Emit data every 5 seconds
-        this.intervalId = setInterval(() => {
-            if (!this.isConnected) return;
-
-            // Random Walk
-            this.state.aqi += (Math.random() - 0.5) * 5;
-            this.state.temp += (Math.random() - 0.5) * 0.5;
-            this.state.hum += (Math.random() - 0.5) * 2;
-
-            // Clamp
-            this.state.aqi = Math.max(10, Math.min(300, this.state.aqi));
-            this.state.temp = Math.max(-10, Math.min(50, this.state.temp));
-            this.state.hum = Math.max(0, Math.min(100, this.state.hum));
-
-            // Presence change probability (low)
-            if (Math.random() > 0.9) {
-                this.state.prs = this.state.prs === 1 ? 0 : 1;
-            }
-
-            // Simulate Smart Node Heartbeat (95% chance active)
-            const nodeStatus = Math.random() > 0.05;
-
-            const packet = {
-                timestamp: Date.now(),
-                nodeStatus: nodeStatus,
-                sensors: {
-                    aqi: Math.round(this.state.aqi),
-                    temp: parseFloat(this.state.temp.toFixed(1)),
-                    hum: Math.round(this.state.hum),
-                    prs: this.state.prs
-                },
-                predictions: this._generatePredictions()
-            };
-
-            this.onMessage(packet);
-
-            // Simulate occasional disconnect (1% chance)
-            if (Math.random() > 0.99) {
-                console.warn("WebSocket: Connection lost (simulated)");
-                this.disconnect();
-                // Auto reconnect after 3s
-                setTimeout(() => this.connect(), 3000);
-            }
-
-        }, 5000);
-    }
-
-    _generatePredictions() {
-        const noise = (factor) => (Math.random() - 0.5) * factor;
-        return {
-            p1: { aqi: Math.round(this.state.aqi + noise(5)), temp: (this.state.temp + noise(1)).toFixed(1), hum: Math.round(this.state.hum + noise(3)) },
-            p5: { aqi: Math.round(this.state.aqi + noise(15)), temp: (this.state.temp + noise(2)).toFixed(1), hum: Math.round(this.state.hum + noise(8)) },
-            p15: { aqi: Math.round(this.state.aqi + noise(30)), temp: (this.state.temp + noise(4)).toFixed(1), hum: Math.round(this.state.hum + noise(15)) }
-        };
-    }
-
-    disconnect() {
-        this.isConnected = false;
-        clearInterval(this.intervalId);
-        this.onStatusChange(false);
-    }
-}
 
 class DashboardManager {
     constructor() {
@@ -111,17 +21,121 @@ class DashboardManager {
             }
         };
 
-        this.mockWs = new MockWebSocket(
-            (data) => this.handleData(data),
-            (status) => this.handleWsStatus(status)
-        );
+        this.ws = null;
+        this.reconnectTimer = null;
     }
 
     init() {
         this.initCharts();
         this.setupControls();
-        this.loadHistory('1h'); // Initial Load
-        this.mockWs.connect();
+        this.connectWebSocket();
+    }
+
+    connectWebSocket() {
+        if (this.ws) {
+            this.ws.close();
+        }
+
+        const currentPort = window.location.port; // Determine logical port if needed, but we hardcoded 8765
+        this.ws = new WebSocket('ws://localhost:8765');
+
+        this.ws.onopen = () => {
+            console.log('WS Connected');
+            this.handleWsStatus(true);
+            this.loadHistory(this.currentRange);
+        };
+
+        this.ws.onclose = () => {
+            console.log('WS Disconnected');
+            this.handleWsStatus(false);
+            // Retry
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = setTimeout(() => this.connectWebSocket(), 5000);
+        };
+
+        this.ws.onerror = (err) => {
+            console.error('WS Error', err);
+            this.handleWsStatus(false);
+        };
+
+        this.ws.onmessage = (event) => {
+            try {
+                const msg = JSON.parse(event.data);
+                this.handleMessage(msg);
+            } catch (e) {
+                console.error("Parse Error", e);
+            }
+        };
+    }
+
+    handleMessage(msg) {
+        if (msg.type === 'live') {
+            const transformed = this.transformLiveData(msg);
+            this.handleData(transformed);
+        } else if (msg.type === 'historical') {
+            this.handleHistoricalData(msg.raw);
+        } else if (msg.type === 'smart_node_status') {
+            this.updateNodeStatus(msg.status === 'Online');
+        }
+    }
+
+    transformLiveData(msg) {
+        // Server: { raw: [ts, aqi, temp, hum, prs], prediction: { aqi: {1m, 5m, 15m}, ... } }
+        // Client: { timestamp, sensors: {aqi, temp, hum, prs}, predictions: {p1, p5, p15}, nodeStatus: true }
+
+        const [ts, aqi, temp, hum, prs] = msg.raw;
+
+        // Transform Predictions
+        // Server: { aqi: {1m: val, ...}, ... }
+        // We need: { p1: {aqi, temp, hum}, ... }
+
+        const preds = { p1: {}, p5: {}, p15: {} };
+        if (msg.prediction) {
+            ['aqi', 'temp', 'hum'].forEach(sensor => {
+                if (msg.prediction[sensor]) {
+                    preds.p1[sensor] = msg.prediction[sensor]['1m']?.toFixed(1) || '--';
+                    preds.p5[sensor] = msg.prediction[sensor]['5m']?.toFixed(1) || '--';
+                    preds.p15[sensor] = msg.prediction[sensor]['15m']?.toFixed(1) || '--';
+                }
+            });
+        }
+
+        return {
+            timestamp: ts,
+            sensors: {
+                aqi: Math.round(aqi),
+                temp: parseFloat(temp).toFixed(1),
+                hum: Math.round(hum),
+                prs: prs
+            },
+            predictions: preds,
+            nodeStatus: true // Assumed alive if we get live data
+        };
+    }
+
+    handleHistoricalData(data) {
+        // data is unique array of dicts from server
+        // [{timestamp, aqi, temp, hum, presence}, ...]
+
+        const labels = [];
+        const aqi = [];
+        const temp = [];
+        const hum = [];
+        const prs = [];
+
+        data.forEach(row => {
+            const time = new Date(row.timestamp).toLocaleTimeString();
+            labels.push(time);
+            aqi.push(row.aqi);
+            temp.push(row.temp);
+            hum.push(row.hum);
+            prs.push(row.presence);
+        });
+
+        this.updateChartData(this.charts.aqi, labels, aqi);
+        this.updateChartData(this.charts.temp, labels, temp);
+        this.updateChartData(this.charts.hum, labels, hum);
+        this.updateChartData(this.charts.prs, labels, prs);
     }
 
     initCharts() {
@@ -237,8 +251,9 @@ class DashboardManager {
     }
 
     pushToChart(chart, label, value) {
-        // Keep only last ~100 points for live view
-        if (chart.data.labels.length > 720) { // 1h of 5s data
+        // Keep only last ~130 points (approx 10 mins?) or 720 for 1h
+        // Let's rely on server history load for full context, this is just for appending
+        if (chart.data.labels.length > 720) {
             chart.data.labels.shift();
             chart.data.datasets[0].data.shift();
         }
@@ -259,11 +274,14 @@ class DashboardManager {
 
     updatePredictions(preds) {
         // Helper to update ID
-        const set = (id, val) => document.getElementById(id).textContent = val;
+        const set = (id, val) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = val;
+        };
 
-        set('p1-aqi', preds.p1.aqi); set('p1-temp', preds.p1.temp); set('p1-hum', preds.p1.hum);
-        set('p5-aqi', preds.p5.aqi); set('p5-temp', preds.p5.temp); set('p5-hum', preds.p5.hum);
-        set('p15-aqi', preds.p15.aqi); set('p15-temp', preds.p15.temp); set('p15-hum', preds.p15.hum);
+        if (preds.p1) { set('p1-aqi', preds.p1.aqi); set('p1-temp', preds.p1.temp); set('p1-hum', preds.p1.hum); }
+        if (preds.p5) { set('p5-aqi', preds.p5.aqi); set('p5-temp', preds.p5.temp); set('p5-hum', preds.p5.hum); }
+        if (preds.p15) { set('p15-aqi', preds.p15.aqi); set('p15-temp', preds.p15.temp); set('p15-hum', preds.p15.hum); }
     }
 
     handleWsStatus(connected) {
@@ -301,68 +319,26 @@ class DashboardManager {
         });
     }
 
-    /**
-     * Generates history with intended GAPS (missing data)
-     */
-    async loadHistory(range) {
+    loadHistory(range) {
         console.log("Loading history for:", range);
 
-        // Configuration
-        let points, intervalSeconds;
-        // 5s resolution requested. 
-        // 1h = 720 points (5s)
-        // 1d = 17280 points (5s) -> Too heavy for Chart.js usually, but requested.
-        // We will cap points for performance in this mock, but keep "feel" high res.
+        // Calculate Time Range
+        const end = new Date();
+        const start = new Date(); // copy
 
-        if (range === '1h') { points = 720; intervalSeconds = 5; }
-        else if (range === '1d') { points = 1000; intervalSeconds = 60 * 60 * 24 / 1000; } // Downsampled slightly for browser safety
-        else if (range === '1w') { points = 1000; intervalSeconds = 60 * 60 * 24 * 7 / 1000; }
-        else { points = 1000; intervalSeconds = 60 * 60 * 24 * 30 / 1000; }
+        if (range === '1h') start.setHours(end.getHours() - 1);
+        else if (range === '1d') start.setDate(end.getDate() - 1);
+        else if (range === '1w') start.setDate(end.getDate() - 7);
+        else if (range === '1m') start.setMonth(end.getMonth() - 1);
 
-        const history = {
-            labels: [],
-            aqi: [], temp: [], hum: [], prs: []
-        };
-
-        const now = Date.now();
-        let state = { aqi: 60, temp: 22, hum: 50, prs: 0 };
-
-        for (let i = points; i >= 0; i--) {
-            const time = now - (i * intervalSeconds * 1000);
-
-            // GAP LOGIC: 5% chance of a "gap" (missing data)
-            // But usually gaps are chunks. Let's make a gap occur every ~100 points
-            if (i > 50 && i < 60) {
-                // Create a gap
-                history.labels.push(new Date(time).toLocaleTimeString());
-                history.aqi.push(null);
-                history.temp.push(null);
-                history.hum.push(null);
-                history.prs.push(null);
-                continue;
-            }
-
-            // Evolve State
-            state.aqi += (Math.random() - 0.5) * 10;
-            state.temp += (Math.random() - 0.5) * 2;
-            state.hum += (Math.random() - 0.5) * 5;
-            state.prs = Math.random() > 0.8 ? (state.prs ? 0 : 1) : state.prs;
-
-            // Clamp
-            state.aqi = Math.max(10, state.aqi);
-
-            history.labels.push(new Date(time).toLocaleTimeString());
-            history.aqi.push(Math.round(state.aqi));
-            history.temp.push(parseFloat(state.temp.toFixed(1)));
-            history.hum.push(Math.round(state.hum));
-            history.prs.push(state.prs);
+        // Send WS Request
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify({
+                type: 'get_historical_time_interval',
+                start: start.toISOString().replace('T', ' ').split('.')[0], // Format matching 'YYYY-MM-DD HH:MM:SS' roughly or what server expects
+                end: end.toISOString().replace('T', ' ').split('.')[0]
+            }));
         }
-
-        // Mass Update Charts
-        this.updateChartData(this.charts.aqi, history.labels, history.aqi);
-        this.updateChartData(this.charts.temp, history.labels, history.temp);
-        this.updateChartData(this.charts.hum, history.labels, history.hum);
-        this.updateChartData(this.charts.prs, history.labels, history.prs);
     }
 
     updateChartData(chart, labels, data) {
