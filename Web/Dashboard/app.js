@@ -166,17 +166,16 @@ class DashboardManager {
             data: { datasets: [{ label: 'Humidity', borderColor: '#8b5cf6', backgroundColor: 'rgba(139, 92, 246, 0.1)', fill: true, data: [] }] }
         });
 
-        // Presence: Scatter plot (using line with no connecting lines)
+        // Presence: Stepped Line with Dash points (No Vertical Lines)
         this.charts.prs = new Chart(document.getElementById('chart-prs'), {
             type: 'line',
             options: {
                 ...commonConfig.options,
-                showLine: false, // Scatter effect
                 scales: {
                     x: { display: false },
                     y: {
                         display: true,
-                        min: -0.2, // Padding
+                        min: -0.2,
                         max: 1.2,
                         ticks: {
                             stepSize: 1,
@@ -185,14 +184,20 @@ class DashboardManager {
                             font: { size: 10 }
                         },
                         grid: {
-                            color: (ctx) => [0, 1].includes(ctx.tick.value) ? 'rgba(255, 255, 255, 0.1)' : 'transparent'
+                            color: (ctx) => [0, 1].includes(ctx.tick.value) ? 'rgba(255, 255, 255, 0.05)' : 'transparent'
                         }
                     }
                 },
                 elements: {
+                    line: {
+                        tension: 0,
+                        borderWidth: 3, // Thicker dash
+                        stepped: true
+                    },
                     point: {
-                        radius: 4,
-                        hoverRadius: 6,
+                        pointStyle: 'rect',
+                        radius: 0, // Hide points, rely on the line segments for the "dash" look
+                        hoverRadius: 4,
                         backgroundColor: (ctx) => ctx.raw === 1 ? '#10b981' : 'rgba(148, 163, 184, 0.5)'
                     }
                 }
@@ -201,8 +206,16 @@ class DashboardManager {
                 datasets: [{
                     label: 'Presence',
                     data: [],
-                    borderColor: 'transparent', // No line
-                    pointBackgroundColor: '#10b981'
+                    // Segment styling: 
+                    // - Green if High->High
+                    // - Gray if Low->Low
+                    // - Transparent if Changed (Removes vertical line)
+                    segment: {
+                        borderColor: ctx => {
+                            if (ctx.p0.parsed.y !== ctx.p1.parsed.y) return 'transparent';
+                            return ctx.p0.parsed.y === 1 ? '#10b981' : 'rgba(148, 163, 184, 0.2)';
+                        }
+                    }
                 }]
             }
         });
