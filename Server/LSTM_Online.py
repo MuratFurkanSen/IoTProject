@@ -1,7 +1,6 @@
 # %%
 # To Supress Unnecessary Warnings
 import warnings
-
 warnings.filterwarnings('ignore', category=FutureWarning)
 
 # Data Processing
@@ -51,11 +50,11 @@ OFFLINE_SCALERS_PATH = '../Models&Scalers/LSTM/scaler_bundle.pkl'
 PREDICTION_INTERVAL = 5  # seconds
 
 # Fine-tuning Parameters
+ONLINE_SAMPLE_SIZE = 2880
 ONLINE_LR = 0.001
-FINE_TUNE_INTERVAL = timedelta(minutes=30)  # 30 min
-
 ONLINE_EPOCHS = 1
 ONLINE_BATCH_SIZE = 32
+FINE_TUNE_INTERVAL = timedelta(minutes=30)  # 30 min
 # %%
 class RollingBuffer:
     max_size = None
@@ -162,7 +161,6 @@ def build_prediction_data(buffer, input_scalers, bounds):
     X = df[INPUT_FEATURES].values[np.newaxis, :, :]
 
     # Scale inputs
-
     for i, scaler in enumerate(input_scalers):
         X[:, :, i] = scaler.transform(X[:, :, i].reshape(-1, 1)).reshape(1, SEQ_LEN)
 
@@ -195,7 +193,7 @@ def build_online_training_data(buffer, input_scalers, target_scalers, bounds):
 
     return X_online, y_online
 # %%
-def predict_future(model, seq):
+def predict_future(model, seq, target_scalers):
     y_pred = model.predict(seq, verbose=0)
 
     for i, scaler in enumerate(target_scalers):
@@ -240,7 +238,7 @@ if __name__ == '__main__':
 
     # Creating Rolling Buffer
     buffer_local = RollingBuffer(
-        max_size=2880
+        max_size=ONLINE_SAMPLE_SIZE
     )
     print('Buffer Created.')
 # %%
@@ -287,5 +285,4 @@ if __name__ == '__main__':
     except KeyboardInterrupt:
         print('\nSystem stopped.')
 """
--1
 # %%

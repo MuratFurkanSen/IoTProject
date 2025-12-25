@@ -1,7 +1,10 @@
 # %%
-# To Supress Unnecessary Warnings
+# To Supress Warnings
 import warnings
-warnings.filterwarnings('ignore', category=FutureWarning)
+
+from websockets.server import ServerConnection
+
+warnings.filterwarnings('ignore')
 
 # Asynchronicity Handlers
 import asyncio
@@ -20,11 +23,12 @@ import websockets
 # Utilities
 import json
 import joblib
-from datetime import datetime
+from datetime import datetime, timedelta
 from tensorflow.keras.models import load_model, clone_model
 
 # Custom Online Trainer Module
 import LSTM_Online
+
 # %%
 # ==========================
 # CONFIG
@@ -38,11 +42,11 @@ WS_PORT = 8765
 MQTT_BROKER = '192.168.1.111'
 MQTT_PORT = 1883
 MQTT_TOPIC = 'sensors/data'
-
+SMART_NODE_TIME_OUT = timedelta(seconds=30)
 # Database
 DB_FILE = 'sensor_data.db'
 
-# Offline Model Parameters - Others Pulled from LSTM_Online.py
+# Model Parameters - Others Pulled from LSTM_Online.py
 OFFLINE_MODEL_PATH = '../Models&Scalers/LSTM/model.keras'
 OFFLINE_SCALERS_PATH = '../Models&Scalers/LSTM/scaler_bundle.pkl'
 
@@ -61,6 +65,7 @@ asyncio.set_event_loop(loop)
 model_lock = asyncio.Lock()
 db_lock = threading.Lock()
 buffer_lock = threading.Lock()
+
 # %%
 # Load offline model and scalers
 model = load_model(OFFLINE_MODEL_PATH)
@@ -80,12 +85,10 @@ target_scalers = scaler_bundle['target_scalers']
 print('Input&Output Scalers Loaded')
 
 iqr_bounds = scaler_bundle['outlier_meta']['bounds']
-print('Input&Output Scalers Loaded')
+print('IQR Bounds Loaded')
 
 # Creating Rolling Buffer for Online Model
-buffer = LSTM_Online.RollingBuffer(
-    max_size=2880
-)
+buffer = LSTM_Online.RollingBuffer(max_size=LSTM_Online.ONLINE_SAMPLE_SIZE)
 print('Buffer Created.')
 # %%
 # ==========================
@@ -117,11 +120,11 @@ def insert_row(data):
             INSERT OR REPLACE INTO sensor_data
             VALUES (?, ?, ?, ?, ?)
         """, (
-            data['timestamp'],
-            data['aqi'],
-            data['temp'],
-            data['hum'],
-            data['presence']
+            data[0],
+            data[1],
+            data[2],
+            data[3],
+            data[4]
         ))
         db.commit()
 
@@ -146,24 +149,54 @@ def query_range(start, end):
         }
         for r in rows
     ]
+
+
 # %%
 # ==========================
 # PREDICTION
 # ==========================
 async def prediction():
     with buffer_lock:
-        seq = LSTM_Online.build_prediction_data(buffer, input_scalers, iqr_bounds)
+        try:
+            seq = LSTM_Online.build_prediction_data(buffer, input_scalers, iqr_bounds)
+        except Exception as e:
+            print(e)
+            return None
 
     async with model_lock:
         m = model
-    pred = LSTM_Online.predict_future(m, seq)
-    return pred
+    try:
+        pred = LSTM_Online.predict_future(m, seq, target_scalers)
+    except Exception as e:
+        print(e)
+        return None
+
+    return {
+        'aqi': {
+            '1m': float(pred[0]),
+            '5m': float(pred[1]),
+            '15m': float(pred[2]),
+        },
+        'temp': {
+            '1m': float(pred[3]),
+            '5m': float(pred[4]),
+            '15m': float(pred[5]),
+        },
+        'hum': {
+            '1m': float(pred[6]),
+            '5m': float(pred[7]),
+            '15m': float(pred[8]),
+        }
+    }
+
+
 # %%
 # ==========================
 # ONLINE TRAINING
 # ==========================
 async def train_online():
     global model
+
     with buffer_lock:
         X_online, y_online = LSTM_Online.build_online_training_data(buffer, input_scalers, target_scalers, iqr_bounds)
 
@@ -178,17 +211,28 @@ async def train_online():
 
     async with model_lock:
         model = model_copy
+
+
 # %%
 # ==========================
 # ASYNC Function Handlers
 # ==========================
 async def handle_live_message(data):
-    pred = await prediction()
+    if len(buffer) > LSTM_Online.SEQ_LEN:
+        print('Predicting...')
+        pred = await prediction()
+        print('Prediction Complete.')
+    else:
+        print(f'Buffer is too small for prediction: {len(buffer)}')
+        pred = None
+
     await broadcast({
         'type': 'live',
         'raw': data,
         'prediction': pred
     })
+
+
 # %%
 # ==========================
 # WEBSOCKET
@@ -196,24 +240,34 @@ async def handle_live_message(data):
 clients = set()
 
 
-async def ws_handler(ws):
-    clients.add(ws)
+async def ws_handler(conn: ServerConnection) -> None:
+    clients.add(conn)
     print('Dashboard connected:', len(clients))
 
     try:
-        async for msg in ws:
+        async for msg in conn:
             req = json.loads(msg)
 
-            # Dashboard requesting historical data
-            if req['type'] == 'get_range':
+            if req['type'] == 'get_historical_time_interval':
                 data = query_range(req['start'], req['end'])
 
-                await ws.send(json.dumps({
+                await conn.send(json.dumps({
                     'type': 'historical',
                     'raw': data,
                 }))
+            elif req['type'] == 'get_web_server_status':
+                await conn.send(json.dumps({
+                    'type': 'web_server_status',
+                    'status': 'Running' ,
+                }))
+            elif req['type'] == 'get_smart_node_status':
+                await conn.send(json.dumps({
+                    'type': 'smart_node_status',
+                    'status': 'Online' if datetime.now() - last_incoming_data_time > SMART_NODE_TIME_OUT else 'Offline',
+                }))
+
     finally:
-        clients.remove(ws)
+        clients.remove(conn)
         print('Dashboard disconnected:', len(clients))
 
 
@@ -238,23 +292,25 @@ async def ws_server():
 
     print(f'WS running on ws://{WS_HOST}:{WS_PORT}')
     await server.wait_closed()
+
+
 # %%
 # ==========================
 # MQTT
 # ==========================
 def on_message(client, userdata, msg):
+    global last_incoming_data_time, last_online_training_time
+
     try:
-        global last_incoming_data_time, last_online_training_time
         payload = json.loads(msg.payload.decode())
         curr_time = datetime.now()
 
-        data = {
-            'timestamp': payload.get('timestamp', now_local()),
-            'aqi': payload.get('aqi', -1),
-            'temp': payload.get('temp', -1),
-            'hum': payload.get('hum', -1),
-            'presence': payload.get('presence', -1)
-        }
+        data = [payload.get('timestamp', now_local()),
+                payload.get('aqi', -1),
+                payload.get('temp', -1),
+                payload.get('hum', -1),
+                payload.get('presence', -1)
+                ]
         with buffer_lock:
             buffer.append(data)
         insert_row(data)
@@ -284,6 +340,8 @@ mqtt_client.subscribe(MQTT_TOPIC)
 
 def mqtt_thread():
     mqtt_client.loop_forever()
+
+
 # %%
 # ==========================
 # START
