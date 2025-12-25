@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IoT Dashboard | FutureSense</title>
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- Styles -->
+    <link rel="stylesheet" href="index.css">
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="glass-panel">
+            <div class="logo">
+                <i class="fa-solid fa-atom pulse"></i>
+                <h1>FutureSense <span class="subtitle">IoT Monitor</span></h1>
+            </div>
+
+            <div class="controls">
+                <div class="time-selector">
+                    <button class="time-btn" data-range="1d">1D</button>
+                    <button class="time-btn active" data-range="1w">1W</button>
+                    <button class="time-btn" data-range="1m">1M</button>
+                    <button class="time-btn" data-range="1y">1Y</button>
+                </div>
+                <div class="status-indicator">
+                    <span class="dot online"></span> Live
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main>
+            <!-- Current Status Row -->
+            <section class="grid-row sensors-row">
+                <!-- Air Quality -->
+                <div class="card glass-panel sensor-card" id="card-air">
+                    <div class="card-header">
+                        <i class="fa-solid fa-wind icon-air"></i>
+                        <h3>Air Quality</h3>
+                    </div>
+                    <div class="card-value">
+                        <span id="val-air">--</span> <small>AQI</small>
+                    </div>
+                    <div class="card-footer">
+                        <span class="trend up"><i class="fa-solid fa-arrow-trend-up"></i> Rising</span>
+                    </div>
+                </div>
+
+                <!-- Temperature -->
+                <div class="card glass-panel sensor-card" id="card-temp">
+                    <div class="card-header">
+                        <i class="fa-solid fa-temperature-half icon-temp"></i>
+                        <h3>Temperature</h3>
+                    </div>
+                    <div class="card-value">
+                        <span id="val-temp">--</span> <small>°C</small>
+                    </div>
+                    <div class="card-footer">
+                        <span class="trend down"><i class="fa-solid fa-arrow-trend-down"></i> Cooling</span>
+                    </div>
+                </div>
+
+                <!-- Humidity -->
+                <div class="card glass-panel sensor-card" id="card-hum">
+                    <div class="card-header">
+                        <i class="fa-solid fa-droplet icon-hum"></i>
+                        <h3>Humidity</h3>
+                    </div>
+                    <div class="card-value">
+                        <span id="val-hum">--</span> <small>%</small>
+                    </div>
+                    <div class="card-footer">
+                        <span class="trend stable"><i class="fa-solid fa-minus"></i> Stable</span>
+                    </div>
+                </div>
+
+                <!-- Presence -->
+                <div class="card glass-panel sensor-card" id="card-presence">
+                    <div class="card-header">
+                        <i class="fa-solid fa-person-rays icon-prs"></i>
+                        <h3>Presence</h3>
+                    </div>
+                    <div class="card-value presence-value">
+                        <span id="val-presence">No Signal</span>
+                    </div>
+                    <div class="card-footer">
+                        <span class="last-seen">Active: <span id="last-seen-time">--</span></span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Predictions Row -->
+            <section class="section-title">
+                <h2><i class="fa-solid fa-crystal-ball"></i> AI Predictions</h2>
+            </section>
+
+            <section class="grid-row prediction-row">
+                <!-- 1 Minute -->
+                <div class="card glass-panel pred-card">
+                    <h4>+1 Minute</h4>
+                    <div class="pred-grid">
+                        <div class="pred-item">
+                            <span class="label">Air</span>
+                            <span class="val" id="pred-1m-air">--</span>
+                            <span class="conf high">98%</span>
+                        </div>
+                        <div class="pred-item">
+                            <span class="label">Temp</span>
+                            <span class="val" id="pred-1m-temp">--</span>
+                            <span class="conf high">99%</span>
+                        </div>
+                        <div class="pred-item">
+                            <span class="label">Hum</span>
+                            <span class="val" id="pred-1m-hum">--</span>
+                            <span class="conf high">99%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 5 Minutes -->
+                <div class="card glass-panel pred-card">
+                    <h4>+5 Minutes</h4>
+                    <div class="pred-grid">
+                        <div class="pred-item">
+                            <span class="label">Air</span>
+                            <span class="val" id="pred-5m-air">--</span>
+                            <span class="conf med">85%</span>
+                        </div>
+                        <div class="pred-item">
+                            <span class="label">Temp</span>
+                            <span class="val" id="pred-5m-temp">--</span>
+                            <span class="conf med">88%</span>
+                        </div>
+                        <div class="pred-item">
+                            <span class="label">Hum</span>
+                            <span class="val" id="pred-5m-hum">--</span>
+                            <span class="conf med">87%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 15 Minutes -->
+                <div class="card glass-panel pred-card">
+                    <h4>+15 Minutes</h4>
+                    <div class="pred-grid">
+                        <div class="pred-item">
+                            <span class="label">Air</span>
+                            <span class="val" id="pred-15m-air">--</span>
+                            <span class="conf low">72%</span>
+                        </div>
+                        <div class="pred-item">
+                            <span class="label">Temp</span>
+                            <span class="val" id="pred-15m-temp">--</span>
+                            <span class="conf low">75%</span>
+                        </div>
+                        <div class="pred-item">
+                            <span class="label">Hum</span>
+                            <span class="val" id="pred-15m-hum">--</span>
+                            <span class="conf low">70%</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Charts Section -->
+            <section class="grid-row charts-row">
+                <div class="card glass-panel chart-container">
+                    <h3>Air Quality History</h3>
+                    <canvas id="chart-air-canvas"></canvas>
+                </div>
+                <div class="card glass-panel chart-container">
+                    <h3>Temperature History</h3>
+                    <canvas id="chart-temp-canvas"></canvas>
+                </div>
+                <div class="card glass-panel chart-container">
+                    <h3>Humidity History</h3>
+                    <canvas id="chart-hum-canvas"></canvas>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Scripts -->
+    <script src="index.js"></script>
+</body>
+
+</html>
