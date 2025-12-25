@@ -4,7 +4,7 @@ BROKER = '192.168.1.111'
 PORT = 1883
 TOPIC = 'test/topic'
 
-output_file = open('SensorNodeData.csv', 'w')
+output_file = open('../SensorNodeData.csv', 'w')
 output_file.write('Timestamp,AQI,Temperature,Humidity,Presence\n')
 
 def on_connect(client, userdata, flags, reasonCode, properties):

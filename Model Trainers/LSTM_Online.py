@@ -16,10 +16,6 @@ from tensorflow.keras.models import load_model
 
 # Deep Learning
 from tensorflow.keras.optimizers import Adam
-
-# Visualization
-import matplotlib.pyplot as plt
-import seaborn as sns
 # %%
 # Incoming Sensor Data
 SENSOR_DATA_COLUMNS = ['Timestamp', 'AQI', 'Temp', 'Hum', 'Pres']

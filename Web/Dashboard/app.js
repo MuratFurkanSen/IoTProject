@@ -86,145 +86,25 @@ class TimeSeriesBuffer {
      * Adds a live point via Queue (FIFO).
      * Removes index 0, adds new data to end.
      */
-    This logic ensures that if the server sends data 15 seconds after the last point (skipping two 5-second slots), the buffer will correctly shift 3 times: inserting 2 null points for the missing times, and 1 real point for the current data. This keeps the X-axis perfectly aligned to the 5-second grid.
-
-Here is the updated full code.
-
-JavaScript
-
-/**
- * IoT Dashboard Controller
- * * Features:
- * - Fixed Size Buffer: 720 points (1 Hour view @ 5s interval).
- * - Grid Alignment: Rounds requests to nearest 5s.
- * - Auto-Gap Filling: Calculates missing time slots between packets and fills them with nulls.
- */
-
-class TimeSeriesBuffer {
-    constructor(capacity = 720, intervalMs = 5000) {
-        this.capacity = capacity;
-        this.interval = intervalMs;
-
-        // Pre-allocate arrays
-        this.times = new Array(capacity).fill(null);
-        this.aqi = new Array(capacity).fill(null);
-        this.temp = new Array(capacity).fill(null);
-        this.hum = new Array(capacity).fill(null);
-        this.prs = new Array(capacity).fill(null);
-
-        // Stores raw timestamps (numbers) for calculation
-        this.raw_times = new Array(capacity).fill(0);
-    }
-
-    /**
-     * Aligns historical data to a perfect 5s grid.
-     */
-    initFromHistory(rows, alignedEndTime) {
-        const endTimeMs = alignedEndTime.getTime();
-        // Start time = End - (Capacity * Interval) + 1 Interval
-        // (This ensures the last slot is exactly endTimeMs)
-        const startTimeMs = endTimeMs - (this.capacity * this.interval) + this.interval;
-
-        let dataIndex = 0;
-
-        for (let i = 0; i < this.capacity; i++) {
-            const targetTs = startTimeMs + (i * this.interval);
-            let match = null;
-
-            if (dataIndex < rows.length) {
-                const rowTs = new Date(rows[dataIndex].timestamp).getTime();
-
-                // Tolerance check (+/- 1s)
-                if (Math.abs(rowTs - targetTs) < 1000) {
-                    match = rows[dataIndex];
-                    dataIndex++;
-                } else if (rowTs < targetTs) {
-                    // Skip old/duplicate data
-                    dataIndex++;
-                    i--;
-                    continue;
-                }
-            }
-
-            this.raw_times[i] = targetTs;
-            this.times[i] = new Date(targetTs).toLocaleTimeString([], { hour12: false });
-
-            if (match) {
-                this.aqi[i] = match.aqi;
-                this.temp[i] = match.temp;
-                this.hum[i] = match.hum;
-                this.prs[i] = match.presence;
-            } else {
-                this.aqi[i] = null;
-                this.temp[i] = null;
-                this.hum[i] = null;
-                this.prs[i] = null;
-            }
-        }
-        console.log(`[Buffer] Initialized ${this.capacity} slots.`);
-    }
-
-    /**
-     * Adds a live point.
-     * Calculates time difference and inserts "Spacer" (null) points
-     * if the new timestamp skipped slots in the 5s grid.
-     */
     addLivePoint(timestamp, sensors) {
         const ts = new Date(timestamp).getTime();
+        const formattedTime = new Date(ts).toLocaleTimeString([], { hour12: false });
 
-        // Get the timestamp of the very last point currently in the buffer
-        // (Handle edge case where buffer might be 0/null initialized)
-        let lastTs = this.raw_times[this.raw_times.length - 1];
-        if (!lastTs) lastTs = ts - this.interval; // Fallback if empty
+        // Shift (Remove oldest)
+        this.raw_times.shift();
+        this.times.shift();
+        this.aqi.shift();
+        this.temp.shift();
+        this.hum.shift();
+        this.prs.shift();
 
-        // 1. Calculate how many 5s intervals have passed since the last point
-        const diff = ts - lastTs;
-
-        // Floor checks how many full 'steps' we need to advance.
-        // E.g., if diff is 10000ms, steps = 2.
-        const steps = Math.floor(diff / this.interval);
-
-        // Safety: If data is old (steps <= 0), ignore it.
-        if (steps <= 0) return;
-
-        // Safety: Don't loop more than capacity (prevent an infinite freeze on huge jumps)
-        const stepsToProcess = Math.min(steps, this.capacity);
-
-        // 2. Loop through every missing step to keep the grid aligned
-        for (let i = 0; i < stepsToProcess; i++) {
-            // Shift oldest out
-            this.raw_times.shift();
-            this.times.shift();
-            this.aqi.shift();
-            this.temp.shift();
-            this.hum.shift();
-            this.prs.shift();
-
-            // Calculate the time for *this* specific slot being added
-            const currentStepTs = lastTs + ((i + 1) * this.interval);
-            const formattedTime = new Date(currentStepTs).toLocaleTimeString([], { hour12: false });
-
-            // Push the time info
-            this.raw_times.push(currentStepTs);
-            this.times.push(formattedTime);
-
-            // Is this the final step? (The actual data point we received)
-            const isTarget = (i === stepsToProcess - 1);
-
-            if (isTarget) {
-                // Fill with actual sensor data
-                this.aqi.push(sensors.aqi);
-                this.temp.push(sensors.temp);
-                this.hum.push(sensors.hum);
-                this.prs.push(sensors.prs);
-            } else {
-                // It is a gap/intermediate step -> Fill with Null
-                this.aqi.push(null);
-                this.temp.push(null);
-                this.hum.push(null);
-                this.prs.push(null);
-            }
-        }
+        // Push (Add newest)
+        this.raw_times.push(ts);
+        this.times.push(formattedTime);
+        this.aqi.push(sensors.aqi);
+        this.temp.push(sensors.temp);
+        this.hum.push(sensors.hum);
+        this.prs.push(sensors.prs);
     }
 }
 

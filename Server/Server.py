@@ -44,7 +44,7 @@ MQTT_PORT = 1883
 MQTT_TOPIC = 'sensors/data'
 SMART_NODE_TIME_OUT = timedelta(seconds=30)
 # Database
-DB_FILE = 'sensor_data.db'
+DB_FILE = 'SensorNodeData.db'
 
 # Model Parameters - Others Pulled from LSTM_Online.py
 OFFLINE_MODEL_PATH = '../Models&Scalers/LSTM/model.keras'
