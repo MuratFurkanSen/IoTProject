@@ -39,8 +39,8 @@ WS_HOST = '0.0.0.0'
 WS_PORT = 8765
 
 # MQTT
-MQTT_BROKER = '192.168.1.111'
-MQTT_PORT = 1883
+MQTT_BROKER = '159.146.28.222'
+MQTT_PORT = 23253
 MQTT_TOPIC = 'sensors/data'
 SMART_NODE_TIME_OUT = timedelta(seconds=30)
 # Database

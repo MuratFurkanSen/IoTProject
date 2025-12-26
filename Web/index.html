@@ -2,60 +2,195 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>IoT Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IoT Analytics Dashboard</title>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Date Adapter for Chart.js (if needed later, but we use timestamps) -->
+
+    <link rel="stylesheet" href="style.css">
 </head>
+<body>
 
-<body style="background-color:#555; color:white; font-family: monospace;">
-<h2>Live Sensor & Prediction Data</h2>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="glass-panel">
+            <div class="logo-area">
+                <i class="fa-solid fa-network-wired"></i>
+                <h1>NeuralNode <span style="font-weight:300; color:var(--text-secondary)">IoT</span></h1>
+            </div>
 
-<div id="status">🔴 Disconnected</div>
-<hr>
+            <!-- Status Indicators -->
+            <div class="status-bar">
+                <div class="status-item" id="status-ws">
+                    <span class="status-dot"></span>
+                    <span>WebSocket</span>
+                </div>
+                <div class="status-item" id="status-node">
+                    <span class="status-dot"></span>
+                    <span>Smart Node</span>
+                </div>
+            </div>
+        </header>
 
-<pre id="output"></pre>
+        <!-- Row 1: Real-time Metrics -->
+        <section>
+            <div class="title-section"><i class="fa-solid fa-tower-broadcast"></i> Live Telemetry</div>
+            <div class="grid-realtime">
+                <!-- AQI -->
+                <div class="glass-panel sensor-card type-air">
+                    <div class="sensor-header">
+                        <h3>Air Quality</h3>
+                        <i class="fa-solid fa-wind"></i>
+                    </div>
+                    <div class="value-display"><span id="live-aqi">--</span></div>
+                    <div class="sensor-meta">Index Value</div>
+                </div>
 
-<script>
-    const output = document.getElementById("output");
-    const status = document.getElementById("status");
+                <!-- Temp -->
+                <div class="glass-panel sensor-card type-temp">
+                    <div class="sensor-header">
+                        <h3>Temperature</h3>
+                        <i class="fa-solid fa-temperature-half"></i>
+                    </div>
+                    <div class="value-display"><span id="live-temp">--</span><span class="unit">°C</span></div>
+                    <div class="sensor-meta">Celsius</div>
+                </div>
 
-    const ws = new WebSocket("ws://192.168.1.111:8765");
+                <!-- Humidity -->
+                <div class="glass-panel sensor-card type-hum">
+                    <div class="sensor-header">
+                        <h3>Humidity</h3>
+                        <i class="fa-solid fa-droplet"></i>
+                    </div>
+                    <div class="value-display"><span id="live-hum">--</span><span class="unit">%</span></div>
+                    <div class="sensor-meta">Relative</div>
+                </div>
 
-    ws.onopen = () => {
-        status.textContent = "🟢 Connected";
-        console.log("Connected to WS server");
-    };
+                <!-- Presence -->
+                <div class="glass-panel sensor-card type-prs">
+                    <div class="sensor-header">
+                        <h3>Presence</h3>
+                        <i class="fa-solid fa-person-rays"></i>
+                    </div>
+                    <div class="value-display presence-text" id="live-prs">--</div>
+                    <div class="sensor-meta">Motion Sensor</div>
+                </div>
+            </div>
+        </section>
 
-    ws.onmessage = (event) => {
-        const msg = JSON.parse(event.data);
-        console.log("Received:", msg);
+        <!-- Row 2: Prediction Models -->
+        <section>
+            <div class="title-section"><i class="fa-solid fa-brain"></i> AI Forecasts</div>
+            <div class="grid-predictions">
+                <!-- +1 Minute -->
+                <div class="glass-panel pred-card">
+                    <div class="pred-title">+1 Minute Forecast</div>
+                    <div class="pred-row">
+                        <span class="pred-label">AQI</span>
+                        <span class="pred-val" id="p1-aqi">--</span>
+                    </div>
+                    <div class="pred-row">
+                        <span class="pred-label">Temp</span>
+                        <span class="pred-val" id="p1-temp">--</span>
+                    </div>
+                    <div class="pred-row">
+                        <span class="pred-label">Hum</span>
+                        <span class="pred-val" id="p1-hum">--</span>
+                    </div>
+                </div>
 
-        if (msg.type === "live") {
-            output.textContent =
-                "RAW DATA\n" +
-                JSON.stringify(msg.raw, null, 2) +
-                "\n\nPREDICTION\n" +
-                JSON.stringify(msg.prediction, null, 2) +
-                "\n\n-------------------------\n" +
-                output.textContent;
-        }
+                <!-- +5 Minute -->
+                <div class="glass-panel pred-card">
+                    <div class="pred-title">+5 Minute Forecast</div>
+                    <div class="pred-row">
+                        <span class="pred-label">AQI</span>
+                        <span class="pred-val" id="p5-aqi">--</span>
+                    </div>
+                    <div class="pred-row">
+                        <span class="pred-label">Temp</span>
+                        <span class="pred-val" id="p5-temp">--</span>
+                    </div>
+                    <div class="pred-row">
+                        <span class="pred-label">Hum</span>
+                        <span class="pred-val" id="p5-hum">--</span>
+                    </div>
+                </div>
 
-        if (msg.type === "historical") {
-            output.textContent =
-                "HISTORICAL DATA\n" +
-                JSON.stringify(msg.raw, null, 2) +
-                "\n\nPREDICTION\n" +
-                JSON.stringify(msg.prediction, null, 2);
-        }
-    };
+                <!-- +15 Minute -->
+                <div class="glass-panel pred-card">
+                    <div class="pred-title">+15 Minute Forecast</div>
+                    <div class="pred-row">
+                        <span class="pred-label">AQI</span>
+                        <span class="pred-val" id="p15-aqi">--</span>
+                    </div>
+                    <div class="pred-row">
+                        <span class="pred-label">Temp</span>
+                        <span class="pred-val" id="p15-temp">--</span>
+                    </div>
+                    <div class="pred-row">
+                        <span class="pred-label">Hum</span>
+                        <span class="pred-val" id="p15-hum">--</span>
+                    </div>
+                </div>
+            </div>
+        </section>
 
-    ws.onerror = (err) => {
-        console.error("WS error", err);
-        status.textContent = "🔴 Error";
-    };
+        <!-- Row 3: History Analysis -->
+        <section>
+            <div class="title-section" style="justify-content: space-between; align-items: flex-end;">
+                <div><i class="fa-solid fa-chart-line"></i> Historical Analysis</div>
+                
+                <!-- Controls Closer to Charts -->
+                <div class="chart-controls-bar">
+                    <div class="time-filter">
+                        <button class="filter-btn active" data-range="1h">1H</button>
+                    </div>
+                </div>
+            </div>
 
-    ws.onclose = () => {
-        status.textContent = "🔴 Disconnected";
-    };
-</script>
+            <div class="charts-layout">
+                <div class="glass-panel chart-wrapper">
+                    <h4>Air Quality History</h4>
+                    <div class="canvas-container">
+                        <canvas id="chart-aqi"></canvas>
+                    </div>
+                </div>
 
+                <div class="glass-panel chart-wrapper">
+                    <h4>Temperature History</h4>
+                    <div class="canvas-container">
+                        <canvas id="chart-temp"></canvas>
+                    </div>
+                </div>
+
+                <div class="glass-panel chart-wrapper">
+                    <h4>Humidity History</h4>
+                    <div class="canvas-container">
+                        <canvas id="chart-hum"></canvas>
+                    </div>
+                </div>
+
+                <div class="glass-panel chart-wrapper">
+                    <h4>Presence History (0/1)</h4>
+                    <div class="canvas-container">
+                        <canvas id="chart-prs"></canvas>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- Application Logic -->
+    <script src="app.js"></script>
 </body>
 </html>

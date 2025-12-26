@@ -142,7 +142,7 @@ class DashboardManager {
     connectWebSocket() {
         if (this.ws) this.ws.close();
 
-        this.ws = new WebSocket('ws://localhost:8765');
+        this.ws = new WebSocket('ws://159.146.28.222:34564');
 
         this.ws.onopen = () => {
             console.log('WS Connected');
