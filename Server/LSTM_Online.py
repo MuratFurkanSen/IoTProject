@@ -25,7 +25,7 @@ OUTLIER_COLUMNS = ['AQI', 'Temp', 'Hum']
 # Model Parameters
 
 NUMERIC_INPUT_FEATURES = ['AQI', 'Temp', 'Hum', 'Pres']
-INPUT_FEATURES = ['AQI', 'Temp', 'Hum', 'Pres', 'hour_sin', 'hour_cos']
+INPUT_FEATURES = ['AQI', 'Temp', 'Hum', 'Pres', 'hour_sin', 'hour_cos', 'day_sin', 'day_cos', 'is_weekend']
 TARGET_FEATURES = ['AQI', 'Temp', 'Hum']
 
 NUM_FEATURES = len(INPUT_FEATURES)
@@ -111,6 +111,13 @@ def process_raw_sensor_data(df, bounds):
     # Add Hourly Features
     df['hour_sin'] = np.sin(2 * np.pi * df['Timestamp'].dt.hour / 24)
     df['hour_cos'] = np.cos(2 * np.pi * df['Timestamp'].dt.hour / 24)
+
+    # Add Daily Features
+    df['day_sin'] = np.sin(2 * np.pi * df['Timestamp'].dt.dayofweek / 7)
+    df['day_cos'] = np.cos(2 * np.pi * df['Timestamp'].dt.dayofweek / 7)
+
+    df['is_weekend'] = df['Timestamp'].dt.dayofweek >= 5
+    df['is_weekend'] = df['is_weekend'].astype(int)
 
     return df
 # %%
